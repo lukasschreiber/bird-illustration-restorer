@@ -7,7 +7,7 @@ import os
 import numpy as np
 
 volume = 1
-selected_pages = [33]
+selected_pages = None
 limit = 500
 preview = True
 show_original = True
@@ -93,7 +93,7 @@ for i, row in index.iterrows():
     if preview:
         cv2.imshow(f"Corrected: {row['en_name']}", utils.image_utils.resize_preview(corrected_image, 600))
         
-    corrected_image = utils.image_utils.reduce_yellow(corrected_image, img, preview=preview, name=row["en_name"], tolerance=30, feather_intensity=0)
+    corrected_image = utils.image_utils.reduce_yellow(corrected_image, img, preview=preview, name=row["en_name"], tolerance=30)
     
     # apply a brightness and contrast adjustment only on the non-white pixels
     non_white_mask = np.all(corrected_image != [255, 255, 255], axis=-1)

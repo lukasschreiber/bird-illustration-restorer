@@ -47,7 +47,7 @@ def correct_color_balance(image: np.ndarray, avg_bg_color: np.ndarray, strength:
     
     return corrected_image
 
-def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int = 30, preview: bool = False, name: str = None, color: np.ndarray = np.array([245, 235, 225], dtype=np.uint8), feather_intensity: int = 5) -> np.ndarray: # default [255, 245, 225]
+def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int = 30, preview: bool = False, name: str = None, color: np.ndarray = np.array([245, 235, 225], dtype=np.uint8)) -> np.ndarray: # default [255, 245, 225]
     """
     Reduce the yellow color in an image by replacing it with white.
     Also removes small artifacts and contours if their contrast is under a threshold.
@@ -63,30 +63,45 @@ def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int 
     np.ndarray: The processed image with reduced yellow
     """
     original_gray = cv2.cvtColor(original_image, cv2.COLOR_BGR2GRAY)
+    
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray[gray > 250] = 255
     equalized = cv2.equalizeHist(gray)
     blurred = cv2.GaussianBlur(equalized, (5, 5), 0)
     
+    edges_original = cv2.Canny(original_gray, threshold1=50, threshold2=150)
+    edges_processed = cv2.Canny(blurred, threshold1=50, threshold2=150)
+    combined_edges = cv2.addWeighted(edges_original, 0.7, edges_processed, 0.3, 0)
+    combined_edges = cv2.morphologyEx(combined_edges, cv2.MORPH_CLOSE, np.ones((9,9), np.uint8))
+    
+    enhanced_blended = cv2.addWeighted(blurred, 0.8, cv2.bitwise_not(combined_edges), 0.2, 0)
+    
+    subject = cv2.Canny(enhanced_blended, threshold1=300, threshold2=400)
+    # subject = cv2.dilate(subject, np.ones((9,9), np.uint8), iterations=1)
+    subject = cv2.morphologyEx(subject, cv2.MORPH_CLOSE, np.ones((32,32), np.uint8))
+    contours, _ = cv2.findContours(subject, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    additional_contours = np.zeros_like(subject)
+    
+    cv2.drawContours(additional_contours, contours, -1, 255, thickness=cv2.FILLED)
+        
+    if preview:
+        cv2.imshow(f'Edges: {name}', resize_preview(additional_contours, 600))
+    
+    # enhanced_image = cv2.add(image, combined_edges)
+
     target_color_int = color.astype(np.int16)
     lower_bound = np.clip(target_color_int - tolerance, 0, 255).astype(np.uint8)
     upper_bound = np.clip(target_color_int + tolerance, 0, 255).astype(np.uint8)
     mask = cv2.inRange(image, lower_bound, upper_bound)
     mask = cv2.bitwise_not(mask)
-    
-    mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=3)
-    
+        
     if preview:
-        cv2.imshow(f'Blurred: {name}', resize_preview(gray, 600))
-    
-    # remove small artifacts by finding contours with a area threshold
+        cv2.imshow(f'Original Mask: {name}', resize_preview(mask, 600))
+        
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-    canny_preview = np.zeros_like(mask, dtype=np.uint8)
-        
-    i = 0
+    
     for contour in contours:
-        i += 1
         if cv2.contourArea(contour) < 10000:
             cv2.fillPoly(mask, [contour], 0)
             continue
@@ -95,54 +110,39 @@ def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int 
         x, y, w, h = cv2.boundingRect(contour)
         if (x == 0 and w == mask.shape[1]) or (y == 0 and h == mask.shape[0]) or (x + w == mask.shape[1] and w == mask.shape[1]) or (y + h == mask.shape[0] and h == mask.shape[0]):
             cv2.fillPoly(mask, [contour], 0)
+            print("here")
             continue
+    
+    subject_mask = np.zeros_like(mask)
+    for contour in contours:
+        cv2.fillPoly(subject_mask, [contour], 255)
         
+    subject_mask = cv2.dilate(subject_mask, np.ones((48,48), np.uint8), iterations=1)
+        
+    additional_contours = cv2.bitwise_and(additional_contours, subject_mask)
+        
+    mask = cv2.add(mask, additional_contours)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((16,16), np.uint8))
+    # mask = cv2.erode(mask, np.ones((9, 9), np.uint8), iterations=1)
+
+    if preview:
+        cv2.imshow(f'Original Mask plus Additional Mask: {name}', resize_preview(mask, 600))
+    
+    # remove small artifacts by finding contours with a area threshold
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if preview:
+        p = np.zeros_like(mask)
+        cv2.drawContours(p, contours, -1, 255, thickness=cv2.FILLED)
+        cv2.imshow(f'Contours: {name}', resize_preview(p, 600))
+                
+    for contour in contours:
        # Create a temporary mask for the current contour
         contour_mask = np.zeros_like(mask, dtype=np.uint8)
         cv2.drawContours(contour_mask, [contour], -1, 255, thickness=cv2.FILLED)
         
-        # if preview:
-        #     cv2.imshow(f"contour_mask {i}", resize_preview(contour_mask))
-
-        # Compute the min/max color values in the contour region
-        region = cv2.bitwise_and(image, image, mask=contour_mask)
-        region_pixels = region[contour_mask == 255]
-        min_val = region_pixels.min(axis=0)
-        max_val = region_pixels.max(axis=0)
-        
-        # Check the color range within the contour
-        color_range = np.max(max_val - min_val)
-        if color_range < 30:  # Low contrast threshold
-            cv2.fillPoly(mask, [contour], 0)
-            
-        extended_mask = cv2.dilate(contour_mask, np.ones((256, 256), np.uint8), iterations=1)
-      
-        edges = cv2.Canny(blurred, 200, 300)
-        edges_original = cv2.Canny(original_gray, threshold1=200, threshold2=300)
-        edges = cv2.bitwise_and(edges, edges, mask=extended_mask)
-        
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5, 5))
-        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
-        
-        combined_edges = cv2.addWeighted(edges_original, 0.7, edges, 0.3, 0)
-        
-        canny_contours, _ = cv2.findContours(combined_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        for canny_contour in canny_contours:
-            perimeter = cv2.arcLength(canny_contour, True)
-            # this definition is probably incorrect, but it works for now
-            compactness = perimeter ** 2 / (4 * np.pi * cv2.contourArea(canny_contour)) if cv2.contourArea(canny_contour) != 0 else 0
-        
-            if cv2.contourArea(canny_contour) > 5000 and compactness < 2550:
-                print(f"compactness: {compactness}")
-                cv2.fillPoly(mask, [canny_contour], 255)
-                cv2.fillPoly(canny_preview, [canny_contour], 255)
-    
-    if feather_intensity > 0:
-        mask = cv2.GaussianBlur(mask, (feather_intensity * 2 + 1, feather_intensity * 2 + 1), 0)
-        
-    mask = cv2.erode(mask, np.ones((9, 9), np.uint8), iterations=1)
-    mask = cv2.dilate(mask, np.ones((9, 9), np.uint8), iterations=1)
+    # mask = cv2.erode(mask, np.ones((9, 9), np.uint8), iterations=1)
+    # mask = cv2.dilate(mask, np.ones((9, 9), np.uint8), iterations=1)
     
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for contour in contours:
@@ -153,7 +153,6 @@ def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int 
     
     if preview:
         cv2.imshow(f'Reduce Yellow Mask: {name}', resize_preview(mask, 600))
-        cv2.imshow(f'Canny Preview: {name}', resize_preview(canny_preview, 600))
     
     neutral_color = np.array([255, 255, 255], dtype=np.uint8)
     normalized_mask = mask.astype(np.float32) / 255.0
@@ -234,37 +233,6 @@ def crop_image_to_subject(image: np.ndarray, padding: int = 0, threshold: int = 
         return cropped_image
 
     return image 
-
-def find_subject_edges(image: np.ndarray, preview: bool = False, name: str = "") -> np.ndarray:
-    # use the Canny edge detector to find edges
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    equalized = cv2.equalizeHist(gray)
-    blurred = cv2.GaussianBlur(equalized, (5, 5), 0)
-    adaptive_thresh = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
-    )
-
-    # Combine with Canny for stronger edges
-    canny_edges = cv2.Canny(gray, 150, 400)  # Tune thresholds for weak edges
-    edges = cv2.bitwise_or(adaptive_thresh, canny_edges)
-    
-    kernel = np.ones((5, 5), np.uint8)  # Larger kernel for better closure
-    closed_edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
-    
-    # closed_edges = cv2.erode(closed_edges, np.ones((3, 3), np.uint8), iterations=1)
-
-    # Step 5: Find Contours
-    contours, hierarchy = cv2.findContours(
-        closed_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
-
-    # Step 6: Draw the largest contour (assume it includes both birds)
-    output_image = np.zeros_like(gray)
-    largest_contour = max(contours, key=cv2.contourArea)
-    cv2.fillPoly(output_image, [largest_contour], 255)
-    
-    if preview:
-        cv2.imshow(f"Edges {name}", resize_preview(output_image))
     
 def resize_preview(image: np.ndarray, max_size: int = 600) -> np.ndarray:
     return cv2.resize(image, (max_size, int(max_size * image.shape[0] / image.shape[1])))
