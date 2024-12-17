@@ -47,7 +47,7 @@ def correct_color_balance(image: np.ndarray, avg_bg_color: np.ndarray, strength:
     
     return corrected_image
 
-def reduce_yellow(image: np.ndarray, tolerance: int = 30, preview: bool = False, name: str = None, color: np.ndarray = np.array([245, 235, 225], dtype=np.uint8), feather_intensity: int = 5) -> np.ndarray: # default [255, 245, 225]
+def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int = 30, preview: bool = False, name: str = None, color: np.ndarray = np.array([245, 235, 225], dtype=np.uint8), feather_intensity: int = 5) -> np.ndarray: # default [255, 245, 225]
     """
     Reduce the yellow color in an image by replacing it with white.
     Also removes small artifacts and contours if their contrast is under a threshold.
@@ -62,6 +62,12 @@ def reduce_yellow(image: np.ndarray, tolerance: int = 30, preview: bool = False,
     Returns:
     np.ndarray: The processed image with reduced yellow
     """
+    original_gray = cv2.cvtColor(original_image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray[gray > 250] = 255
+    equalized = cv2.equalizeHist(gray)
+    blurred = cv2.GaussianBlur(equalized, (5, 5), 0)
+    
     target_color_int = color.astype(np.int16)
     lower_bound = np.clip(target_color_int - tolerance, 0, 255).astype(np.uint8)
     upper_bound = np.clip(target_color_int + tolerance, 0, 255).astype(np.uint8)
@@ -70,13 +76,8 @@ def reduce_yellow(image: np.ndarray, tolerance: int = 30, preview: bool = False,
     
     mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=3)
     
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray[gray > 250] = 255
-    equalized = cv2.equalizeHist(gray)
-    blurred = cv2.GaussianBlur(equalized, (5, 5), 0)
-    
     if preview:
-        cv2.imshow(f'Blurred: {name}', resize_preview(blurred, 600))
+        cv2.imshow(f'Blurred: {name}', resize_preview(gray, 600))
     
     # remove small artifacts by finding contours with a area threshold
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -86,7 +87,7 @@ def reduce_yellow(image: np.ndarray, tolerance: int = 30, preview: bool = False,
     i = 0
     for contour in contours:
         i += 1
-        if cv2.contourArea(contour) < 5000:
+        if cv2.contourArea(contour) < 10000:
             cv2.fillPoly(mask, [contour], 0)
             continue
         
@@ -117,12 +118,15 @@ def reduce_yellow(image: np.ndarray, tolerance: int = 30, preview: bool = False,
         extended_mask = cv2.dilate(contour_mask, np.ones((256, 256), np.uint8), iterations=1)
       
         edges = cv2.Canny(blurred, 200, 300)
+        edges_original = cv2.Canny(original_gray, threshold1=200, threshold2=300)
         edges = cv2.bitwise_and(edges, edges, mask=extended_mask)
         
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5, 5))
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
         
-        canny_contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        combined_edges = cv2.addWeighted(edges_original, 0.7, edges, 0.3, 0)
+        
+        canny_contours, _ = cv2.findContours(combined_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         for canny_contour in canny_contours:
             perimeter = cv2.arcLength(canny_contour, True)
@@ -136,6 +140,16 @@ def reduce_yellow(image: np.ndarray, tolerance: int = 30, preview: bool = False,
     
     if feather_intensity > 0:
         mask = cv2.GaussianBlur(mask, (feather_intensity * 2 + 1, feather_intensity * 2 + 1), 0)
+        
+    mask = cv2.erode(mask, np.ones((9, 9), np.uint8), iterations=1)
+    mask = cv2.dilate(mask, np.ones((9, 9), np.uint8), iterations=1)
+    
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        if cv2.contourArea(contour) < 10000:
+            cv2.fillPoly(mask, [contour], 0)
+            
+        cv2.fillPoly(mask, [contour], 255)
     
     if preview:
         cv2.imshow(f'Reduce Yellow Mask: {name}', resize_preview(mask, 600))
