@@ -79,21 +79,11 @@ for i, row in index.iterrows():
     # apply a bilateral filter to smooth the image
     corrected_image = cv2.bilateralFilter(corrected_image, 9, 75, 75)
     
-    # apply something similar to photoshop's levels
-    # inBlack  = np.array([0, 0, 0], dtype=np.float32)
-    # inWhite  = np.array([250, 250, 250], dtype=np.float32)
-    # inGamma  = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-    # outBlack = np.array([0, 0, 0], dtype=np.float32)
-    # outWhite = np.array([255, 255, 255], dtype=np.float32)
-
-    # corrected_image = np.clip( (corrected_image - inBlack) / (inWhite - inBlack), 0, 255 )                            
-    # corrected_image = ( corrected_image ** (1/inGamma) ) *  (outWhite - outBlack) + outBlack
-    # corrected_image = np.clip( corrected_image, 0, 255).astype(np.uint8)
-    
     if preview:
         cv2.imshow(f"Corrected: {row['en_name']}", utils.image_utils.resize_preview(corrected_image, 600))
         
-    corrected_image = utils.image_utils.reduce_yellow(corrected_image, img, preview=preview, name=row["en_name"], tolerance=30)
+    corrected_image, mask = utils.image_utils.reduce_yellow(corrected_image, img, preview=preview, name=row["en_name"], tolerance=30)
+    corrected_image = utils.image_utils.remove_text_remains(corrected_image, preview=preview, name=row["en_name"])
     
     # apply a brightness and contrast adjustment only on the non-white pixels
     non_white_mask = np.all(corrected_image != [255, 255, 255], axis=-1)
@@ -108,7 +98,7 @@ for i, row in index.iterrows():
     corrected_image = np.uint8(corrected_image)
     
     padding = 50
-    corrected_image = utils.image_utils.crop_image_to_subject(corrected_image, padding=0, preview=preview, name=row["en_name"])
+    corrected_image = utils.image_utils.crop_image_to_subject(corrected_image, mask, padding=0, preview=preview, name=row["en_name"])
     corrected_image = cv2.copyMakeBorder(corrected_image, padding, padding, padding, padding, cv2.BORDER_CONSTANT, value=[255, 255, 255])
     
     if show_original and preview:

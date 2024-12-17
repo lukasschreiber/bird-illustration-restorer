@@ -47,7 +47,7 @@ def correct_color_balance(image: np.ndarray, avg_bg_color: np.ndarray, strength:
     
     return corrected_image
 
-def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int = 30, preview: bool = False, name: str = None, color: np.ndarray = np.array([245, 235, 225], dtype=np.uint8)) -> np.ndarray: # default [255, 245, 225]
+def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int = 30, preview: bool = False, name: str = None, color: np.ndarray = np.array([245, 235, 225], dtype=np.uint8)) -> tuple[np.ndarray, np.ndarray]: # default [255, 245, 225]
     """
     Reduce the yellow color in an image by replacing it with white.
     Also removes small artifacts and contours if their contrast is under a threshold.
@@ -110,7 +110,6 @@ def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int 
         x, y, w, h = cv2.boundingRect(contour)
         if (x == 0 and w == mask.shape[1]) or (y == 0 and h == mask.shape[0]) or (x + w == mask.shape[1] and w == mask.shape[1]) or (y + h == mask.shape[0] and h == mask.shape[0]):
             cv2.fillPoly(mask, [contour], 0)
-            print("here")
             continue
     
     subject_mask = np.zeros_like(mask)
@@ -158,10 +157,10 @@ def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int 
     normalized_mask = mask.astype(np.float32) / 255.0
     blended_image = (normalized_mask[:, :, None] * image.astype(np.float32) +
                         (1 - normalized_mask[:, :, None]) * neutral_color.astype(np.float32)).astype(np.uint8)
-    return blended_image
+    return blended_image, mask
 
 
-def crop_image_to_subject(image: np.ndarray, padding: int = 0, threshold: int = 240, preview: bool = False, name: str = None) -> np.ndarray:
+def crop_image_to_subject(image: np.ndarray, mask: np.ndarray, padding: int = 0, threshold: int = 240, preview: bool = False, name: str = None) -> np.ndarray:
     """
     Crop an image to the subject based on a luminance threshold.
     The subject is assumed to be the darkest part of the image.
@@ -177,38 +176,25 @@ def crop_image_to_subject(image: np.ndarray, padding: int = 0, threshold: int = 
     Returns:
     np.ndarray: The cropped image.
     """
-    
-    luminance = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, mask = cv2.threshold(luminance, threshold, 255, cv2.THRESH_BINARY)
-    mask_inv = cv2.bitwise_not(mask)
-    
-    # Erode and dilate to refine the mask
-    kernel_erode = np.ones((16, 16), np.uint8)
-    kernel_dilate = np.ones((48, 48), np.uint8)
-    mask_inv = cv2.erode(mask_inv, kernel_erode, iterations=1)
-    mask_inv = cv2.dilate(mask_inv, kernel_dilate, iterations=1)
+
     
     # Find contours
-    contours, _ = cv2.findContours(mask_inv, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if contours:
         # Create a blank mask and draw all contours
-        combined_mask = np.zeros_like(mask_inv)
+        combined_mask = np.zeros_like(mask)
         for contour in contours:
             cv2.fillPoly(combined_mask, [contour], 255)
         
-        # Dilate the combined mask to merge nearby contours
-        # TODO Omitting this could improve reduction of non-relevant contours but that only works if yellow correction is better at keeping details inside of birds
-        merged_mask = cv2.dilate(combined_mask, np.ones((120, 120), np.uint8), iterations=1)
-        
         # Find merged contours
-        merged_contours, _ = cv2.findContours(merged_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        merged_contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         # Find the largest merged contour and create a bounding box
         max_area = cv2.contourArea(max(merged_contours, key=cv2.contourArea))
         relevant_contours = [contour for contour in merged_contours if cv2.contourArea(contour) > 0.5 * max_area]
         
         # Create a new mask for relevant contours
-        final_mask = np.zeros_like(mask_inv)
+        final_mask = np.zeros_like(mask)
         for contour in relevant_contours:
             cv2.fillPoly(final_mask, [contour], 255)
         
@@ -232,7 +218,36 @@ def crop_image_to_subject(image: np.ndarray, padding: int = 0, threshold: int = 
         
         return cropped_image
 
-    return image 
+    return image
+
+def remove_text_remains(image: np.ndarray, preview: bool = False, name: str = "") -> np.ndarray:
+    cleaned_image = image.copy()
+    
+    gray = cv2.cvtColor(cleaned_image, cv2.COLOR_BGR2GRAY)
+    
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    binary = cv2.erode(binary, np.ones((16,16), np.uint8), iterations=1)
+    
+    if preview:
+        cv2.imshow(f'Binary: {name}', resize_preview(binary, 600))
+    
+    height = image.shape[0]
+    bottom_10_start = int(height * 0.9)
+    mask = np.zeros_like(binary)
+    mask[bottom_10_start:, :] = 255
+    
+    binary = cv2.bitwise_not(binary)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        
+        if y >= bottom_10_start and (y + h) <= height:
+            area = cv2.contourArea(contour)
+            if area < 10000:
+                cv2.drawContours(cleaned_image, [contour], -1, (255, 255, 255), thickness=cv2.FILLED)
+
+    return cleaned_image
     
 def resize_preview(image: np.ndarray, max_size: int = 600) -> np.ndarray:
     return cv2.resize(image, (max_size, int(max_size * image.shape[0] / image.shape[1])))
