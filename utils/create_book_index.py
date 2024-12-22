@@ -14,7 +14,7 @@ list_of_plates = [11,12] # list of plates to extract the index from, this is the
 sites_start_at = 151 # the page number where the sites start
 
 
-pdf_path = f'./in/raw/birdsEurope{utils.number_utils.roman_number(volume)}Goul.pdf'
+pdf_path = f'../data/in/raw/birdsEurope{utils.number_utils.roman_number(volume)}Goul.pdf'
 
 if not os.path.exists(pdf_path):
     print(f'PDF file {pdf_path} does not exist')
@@ -68,7 +68,7 @@ df = pd.concat([df, missing_df], ignore_index=True)
 df = df.sort_values("page")
 
 # save as csv in in/raw
-df.to_csv(f'./out/birdsEurope{utils.number_utils.roman_number(volume)}Goul.csv', index=False)
+df.to_csv(f'../data/out/birdsEurope{utils.number_utils.roman_number(volume)}Goul.csv', index=False)
 
 
 

@@ -7,7 +7,7 @@ import os
 import numpy as np
 
 volume = 1
-selected_pages = None
+selected_pages = [31]
 limit = 500
 preview = True
 show_original = True
@@ -71,13 +71,10 @@ for i, row in index.iterrows():
     if weighted_count_vertical > weighted_count_horizontal:
         img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
         
-    # utils.image_utils.find_subject_edges(img, preview=preview, name=row["en_name"])
         
     avg_bg_color = utils.image_utils.detect_background_color_kmeans(img)
     corrected_image = utils.image_utils.correct_color_balance(img, avg_bg_color, strength=1.0)
         
-    # apply a bilateral filter to smooth the image
-    corrected_image = cv2.bilateralFilter(corrected_image, 9, 75, 75)
     
     if preview:
         cv2.imshow(f"Corrected: {row['en_name']}", utils.image_utils.resize_preview(corrected_image, 600))
@@ -85,6 +82,8 @@ for i, row in index.iterrows():
     corrected_image, mask = utils.image_utils.reduce_yellow(corrected_image, img, preview=preview, name=row["en_name"], tolerance=30)
     corrected_image = utils.image_utils.remove_text_remains(corrected_image, preview=preview, name=row["en_name"])
     
+    corrected_image = cv2.bilateralFilter(corrected_image, 9, 75, 75)
+
     # apply a brightness and contrast adjustment only on the non-white pixels
     non_white_mask = np.all(corrected_image != [255, 255, 255], axis=-1)
         

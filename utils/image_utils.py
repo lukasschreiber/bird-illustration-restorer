@@ -85,8 +85,8 @@ def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int 
     
     cv2.drawContours(additional_contours, contours, -1, 255, thickness=cv2.FILLED)
         
-    if preview:
-        cv2.imshow(f'Edges: {name}', resize_preview(additional_contours, 600))
+    # if preview:
+    #     cv2.imshow(f'Edges: {name}', resize_preview(additional_contours, 600))
     
     # enhanced_image = cv2.add(image, combined_edges)
 
@@ -116,7 +116,7 @@ def reduce_yellow(image: np.ndarray, original_image: np.ndarray, tolerance: int 
     for contour in contours:
         cv2.fillPoly(subject_mask, [contour], 255)
         
-    subject_mask = cv2.dilate(subject_mask, np.ones((48,48), np.uint8), iterations=1)
+    # subject_mask = cv2.dilate(subject_mask, np.ones((48,48), np.uint8), iterations=1)
         
     additional_contours = cv2.bitwise_and(additional_contours, subject_mask)
         
