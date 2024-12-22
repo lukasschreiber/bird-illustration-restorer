@@ -1,15 +1,21 @@
 pipeline:
   - step: LoadImageStep
-    output: initial_image
     input: null
+    output: initial_image
     parameters:
       book: "birdsEuropeIGoul"
-      pages: [1, 2, 31]
-  - step: GrayscaleStep
+      pages: [1, 2, 34]
+
+  - step: FixOrientationStep
     input: initial_image
+    output: oriented_image
+
+  - step: GrayscaleStep
+    input: oriented_image
     output: grayscale_image
+
   - step: ResizeStep
     input: grayscale_image
     output: resized_image
     parameters:
-      height: 800
+      max: 800

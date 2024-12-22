@@ -1,6 +1,17 @@
 from dataclasses import dataclass
 import yaml
 import numpy as np
+from dataclasses import replace
+
+@dataclass        
+class PipelineImageContainer:
+    image: np.ndarray 
+    page: int
+    instance: int
+    english_label: str
+    scientific_label: str
+    physical_page: int
+    
 
 class Pipeline:
     def __init__(self):
@@ -16,7 +27,7 @@ class Pipeline:
         """
         self.steps.append((step, input_name))
 
-    def run(self):
+    def run(self) -> list[PipelineImageContainer] | PipelineImageContainer:
         """
         Run the pipeline with the initial data.
         :param initial_data: The initial data to start the pipeline
@@ -62,15 +73,6 @@ class Pipeline:
             step_args = step_config.get('parameters', {})
             self.add(step_class(step_name, **step_args, pipeline=self), step_config.get('input', None))
     
-@dataclass        
-class PipelineImageContainer:
-    image: np.ndarray 
-    page: int
-    instance: int
-    english_label: str
-    scientific_label: str
-    physical_page: int
-    
 class GlobalObjectStorage:
     def __init__(self):
         self.storage: dict[str, any] = {}
@@ -104,6 +106,6 @@ class PipelineStep:
         Process a list of inputs or a single input.
         """
         if isinstance(inputs, list):
-            return [self.process_single(item) for item in inputs]
+            return [self.process_single(replace(item)) for item in inputs]
         else:
-            return self.process_single(inputs)
+            return self.process_single(replace(inputs))

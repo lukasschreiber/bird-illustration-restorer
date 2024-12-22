@@ -3,6 +3,7 @@ import inspect
 from .load import LoadImageStep
 from .resize import ResizeStep
 from .gray import GrayscaleStep
+from .fix_orientation import FixOrientationStep
 
 # Automatically register all steps in this module
 STEP_REGISTRY = {}
