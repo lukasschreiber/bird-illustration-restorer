@@ -7,8 +7,8 @@ pipeline = Pipeline()
 pipeline.load_from_config("config.yaml")
 
 output_images = pipeline.run()
-for i, img in enumerate(output_images):
-    cv2.imshow(f"Image {i}", img)
+for i, container in enumerate(output_images):
+    cv2.imshow(f"Image {i}", container.image)
 
 # Wait for a key press and close the window
 cv2.waitKey(0)
