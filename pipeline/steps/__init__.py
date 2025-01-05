@@ -4,6 +4,8 @@ from .load import LoadImageStep
 from .resize import ResizeStep
 from .gray import GrayscaleStep
 from .fix_orientation import FixOrientationStep
+from .reduce_yellow import ReduceYellowStep
+from .whitebalance import WhiteBalanceStep
 
 # Automatically register all steps in this module
 STEP_REGISTRY = {}

@@ -12,11 +12,23 @@ class PipelineImageContainer:
     scientific_label: str
     physical_page: int
     
+@dataclass
+class PreviewImage:
+    image: np.ndarray | None
+    page: int | None
+    instance: int | None
+    english_label: str | None
+    scientific_label: str | None
+    physical_page: int | None
+    title: str
 
 class Pipeline:
     def __init__(self):
         self.steps: list[PipelineStep] = []
         self.cache: dict[str, PipelineImageContainer] = {}
+        self.preview_enabled: bool = False
+        self.preview_images: dict[str, PreviewImage] = {}
+        self.preview_image_titles: dict[str, str] = {}
         self.global_object_storage: GlobalObjectStorage = GlobalObjectStorage()
 
     def add(self, step, input_name: str):
@@ -37,8 +49,31 @@ class Pipeline:
             inputs = self.cache[input_name] if input_name else None
             result = step.run(inputs)
             self.cache[step.name] = result
+                                    
+            if self.preview_enabled and step.name in self.preview_images:
+                preview_result = [result] if not isinstance(result, list) else result
+                preview_images = []
+                for preview_result_item in preview_result:
+                    preview_image = PreviewImage(image=preview_result_item.image, page=preview_result_item.page, instance=preview_result_item.instance, english_label=preview_result_item.english_label, scientific_label=preview_result_item.scientific_label, physical_page=preview_result_item.physical_page, title=self.preview_image_titles[step.name])
+                    preview_images.append(preview_image)
+                    
+                self.preview_images[step.name] = preview_images if len(preview_images) > 1 else preview_images[0]                
 
         return result
+    
+    def get_previews(self, size: int = 800) -> dict[str, PreviewImage | list[PreviewImage]]:
+        """
+        Get the preview images.
+        """
+        for preview_image in self.preview_images.values():
+            from .steps import ResizeStep
+            if isinstance(preview_image, list):
+                for img in preview_image:
+                    img.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(img)).image
+            else:
+                preview_image.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(preview_image)).image
+            # print([img.title for img in preview_image] if isinstance(preview_image, list) else preview_image.title)
+        return self.preview_images
     
     def get_property(self, name: str, type_hint: type = None) -> any:
         """
@@ -72,6 +107,16 @@ class Pipeline:
             step_class = STEP_REGISTRY[step_config['step']]
             step_args = step_config.get('parameters', {})
             self.add(step_class(step_name, **step_args, pipeline=self), step_config.get('input', None))
+            
+        if 'preview' in config:
+            self.preview_enabled = config['preview']['enabled'] if 'enabled' in config['preview'] else False
+            if self.preview_enabled:
+                for preview_config in config['preview']['images']:
+                    if 'enabled' in preview_config and not preview_config['enabled']:
+                        continue
+                    self.preview_images[preview_config['name']] = None
+                    self.preview_image_titles[preview_config['name']] = preview_config.get('title', preview_config['name'])
+
     
 class GlobalObjectStorage:
     def __init__(self):

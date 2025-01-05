@@ -14,8 +14,32 @@ pipeline:
     input: oriented_image
     output: grayscale_image
 
-  - step: ResizeStep
-    input: grayscale_image
-    output: resized_image
+  - step: WhiteBalanceStep
+    input: oriented_image
+    output: white_balanced_image
     parameters:
-      max: 800
+      strength: 1.0
+      k: 3
+      max_size: 256
+
+  - step: ReduceYellowStep
+    input: white_balanced_image
+    output: reduced_yellow_image
+    parameters:
+      grayscale_image: white_balanced_image
+      tolerance: 30
+      color: [245, 235, 225]
+
+preview:
+  enabled: true
+  images:
+    - name: reduced_yellow_image
+      title: "Output"
+      enabled: true
+    - name: oriented_image
+      title: "Oriented Image"
+      enabled: true
+    - name: white_balanced_image
+      title: "White Balanced Image"
+      enabled: true
+
