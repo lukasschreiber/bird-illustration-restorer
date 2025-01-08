@@ -33,10 +33,40 @@ pipeline:
       tolerance: 30
       color: [245, 235, 225]
 
+  - step: BilateralFilterStep
+    input: reduced_yellow_image
+    output: bilateral_filtered_image
+    parameters:
+      diameter: 9
+      sigma_color: 75
+      sigma_space: 75
+
+  - step: MaskColorStep
+    input: bilateral_filtered_image
+    output: non_white_mask
+    parameters:
+      color: [255, 255, 255]
+
+  - step: BrightnessContrastStep
+    input: bilateral_filtered_image
+    mask: non_white_mask
+    output: bright_contrast_image
+    parameters:
+      brightness: -40
+      contrast: 30
+
+  - step: GrayscaleStep
+    input: bright_contrast_image
+    output: bright_contrast_grayscale_image
+
+  - step: FindMinorContoursStep
+    input: bright_contrast_grayscale_image
+    output: minor_contours
+
 preview:
   enabled: true
   images:
-    - name: reduced_yellow_image
+    - name: bright_contrast_image
       title: "Output"
       enabled: true
     - name: oriented_image
@@ -44,5 +74,11 @@ preview:
       enabled: true
     - name: white_balanced_image
       title: "White Balanced Image"
+      enabled: true
+    - name: non_white_mask
+      title: "Non White Mask"
+      enabled: false
+    - name: minor_contours
+      title: "Minor Contours Mask"
       enabled: true
 

@@ -6,6 +6,10 @@ from .gray import GrayscaleStep
 from .fix_orientation import FixOrientationStep
 from .reduce_yellow import ReduceYellowStep
 from .whitebalance import WhiteBalanceStep
+from .bilateral_filter import BilateralFilterStep
+from .brightness_contrast import BrightnessContrastStep
+from .mask_color import MaskColorStep
+from .find_minor_contours import FindMinorContoursStep
 
 # Automatically register all steps in this module
 STEP_REGISTRY = {}

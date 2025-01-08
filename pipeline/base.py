@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import yaml
 import numpy as np
 from dataclasses import replace
+import cv2
 
 @dataclass        
 class PipelineImageContainer:
@@ -72,7 +73,7 @@ class Pipeline:
                 for img in preview_image:
                     img.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(img)).image
             else:
-                preview_image.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(preview_image), None).image
+                preview_image.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(preview_image)).image
             # print([img.title for img in preview_image] if isinstance(preview_image, list) else preview_image.title)
         return self.preview_images
     
@@ -107,7 +108,7 @@ class Pipeline:
             step_name = step_config['output']
             step_class = STEP_REGISTRY[step_config['step']]
             step_args = step_config.get('parameters', {})
-            self.add(step_class(step_name, **step_args, pipeline=self), step_config.get('input', None))
+            self.add(step_class(step_name, **step_args, pipeline=self), step_config.get('input', None), step_config.get('mask', None))
             
         if 'preview' in config:
             self.preview_enabled = config['preview']['enabled'] if 'enabled' in config['preview'] else False
@@ -141,13 +142,33 @@ class PipelineStep:
         self.name = name
         self.pipeline = pipeline
 
-    def process_single(self, image: PipelineImageContainer, mask: np.ndarray | None = None) -> PipelineImageContainer:
+    def process_single(self, image: PipelineImageContainer) -> PipelineImageContainer:
         """
         Subclasses should implement this to process a single input.
         """
         raise NotImplementedError("Subclasses must implement 'process_single'.")
 
-    def run(self, inputs: list[PipelineImageContainer] | PipelineImageContainer, masks: list[np.ndarray] | np.ndarray | None = None) -> list[PipelineImageContainer] | PipelineImageContainer:
+    def process_masked_single(self, image: PipelineImageContainer, mask: PipelineImageContainer | None = None) -> PipelineImageContainer:
+        if mask is None:
+            return self.process_single(image)
+        
+        if image.image.shape[:2] != mask.image.shape[:2]:
+            raise ValueError("The dimensions of the mask must match the dimensions of the image.")
+        
+        if len(mask.image.shape) > 2 or mask.image.dtype != np.uint8:
+            raise ValueError("The mask must be a single-channel binary image with dtype=np.uint8.")
+
+        print("here")
+        masked_image = image.image.copy()
+        roi = cv2.bitwise_and(masked_image, masked_image, mask=mask.image)
+        roi_container = replace(image, image=roi)
+        processed_roi_container = self.process_single(roi_container)
+        processed_image = masked_image.copy()
+        processed_image[mask.image > 0] = processed_roi_container.image[mask.image > 0]
+
+        return replace(image, image=processed_image)
+
+    def run(self, inputs: list[PipelineImageContainer] | PipelineImageContainer, masks: list[PipelineImageContainer] | PipelineImageContainer | None = None) -> list[PipelineImageContainer] | PipelineImageContainer:
         """
         Process a list of inputs or a single input.
         """
@@ -155,9 +176,9 @@ class PipelineStep:
             if masks and not isinstance(masks, list):
                 raise ValueError("Masks should be a list if inputs are a list.")
             return [
-                self.process_single(replace(item), mask=(masks[i] if masks else None)) 
+                self.process_masked_single(replace(item), mask=(masks[i] if masks else None)) 
                 for i, item in enumerate(inputs)
             ]
         else:
-            mask = masks if isinstance(masks, np.ndarray) else None
-            return self.process_single(replace(inputs), mask)
+            mask = masks if isinstance(masks, PipelineImageContainer) else None
+            return self.process_masked_single(replace(inputs), mask)

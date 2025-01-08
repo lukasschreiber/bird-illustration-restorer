@@ -6,7 +6,7 @@ class FixOrientationStep(PipelineStep):
     def __init__(self, name, pipeline=None):
         super().__init__(name, pipeline)
 
-    def process_single(self, input_item: PipelineImageContainer, mask):
+    def process_single(self, input_item: PipelineImageContainer):
         image = input_item
         
         pdf = self.pipeline.get_property("pdf", Document)

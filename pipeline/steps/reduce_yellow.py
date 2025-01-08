@@ -9,7 +9,7 @@ class ReduceYellowStep(PipelineStep):
         self.grayscale_image = grayscale_image
         super().__init__(name, pipeline)
 
-    def process_single(self, input_item: PipelineImageContainer, mask):
+    def process_single(self, input_item: PipelineImageContainer):
         # find the image where instance and page are the same in self.pipeline.cache[grayscale_image]
         original_image = None
         for item in self.pipeline.cache[self.grayscale_image]:
@@ -17,7 +17,7 @@ class ReduceYellowStep(PipelineStep):
                 original_image = item.image
                 break
 
-        corrected_image, mask = self._reduce_yellow(input_item.image, original_image, self.tolerance, self.color)
+        corrected_image = self._reduce_yellow(input_item.image, original_image, self.tolerance, self.color)
         
         input_item.image = corrected_image
         return input_item
@@ -113,4 +113,4 @@ class ReduceYellowStep(PipelineStep):
         neutral_color = np.array([255, 255, 255], dtype=np.uint8)
         normalized_mask = mask.astype(np.float32) / 255.0
         blended_image = (normalized_mask[:, :, None] * image.astype(np.float32) + (1 - normalized_mask[:, :, None]) * neutral_color.astype(np.float32)).astype(np.uint8)
-        return blended_image, mask
+        return blended_image

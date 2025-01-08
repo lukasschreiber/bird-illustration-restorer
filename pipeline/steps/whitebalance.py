@@ -11,7 +11,7 @@ class WhiteBalanceStep(PipelineStep):
         self.correction_min = correction_min
         self.correction_max = correction_max
 
-    def process_single(self, input_item: PipelineImageContainer, mask):
+    def process_single(self, input_item: PipelineImageContainer):
         input_item.image = self._correct_color_balance(input_item.image, self._detect_background_color_kmeans(input_item.image, self.k, self.max_size), self.strength, self.correction_min, self.correction_max)
         return input_item
     
