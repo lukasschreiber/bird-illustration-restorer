@@ -4,8 +4,9 @@ pipeline:
     output: initial_image
     parameters:
       book: "birdsEuropeIGoul"
+      pages: [2]
       # pages: [1, 2, 34]
-      pages: [43]
+      # pages: [43]
 
   - step: FixOrientationStep
     input: initial_image
@@ -59,26 +60,49 @@ pipeline:
     input: bright_contrast_image
     output: bright_contrast_grayscale_image
 
-  - step: FindMinorContoursStep
+  - step: FindSubjectStep
     input: bright_contrast_grayscale_image
-    output: minor_contours
+    output: subject_mask
+    parameters:
+      threshold: 0.5
+      shift: 50
+
+  - step: CropToMaskStep
+    input: bright_contrast_image
+    mask: subject_mask
+    output: cropped_image
+    parameters:
+      background_color: [255, 255, 255]
+      padding: 50
+
+  - step: SaveImageStep
+    input: cropped_image
+    output: null
+    parameters:
+      output_folder: ./data/out/processed/
 
 preview:
   enabled: true
   images:
-    - name: bright_contrast_image
+    - name: cropped_image
       title: "Output"
       enabled: true
     - name: oriented_image
       title: "Oriented Image"
-      enabled: true
+      enabled: false
     - name: white_balanced_image
       title: "White Balanced Image"
       enabled: true
     - name: non_white_mask
       title: "Non White Mask"
       enabled: false
-    - name: minor_contours
-      title: "Minor Contours Mask"
+    - name: subject_mask
+      title: "Subject Mask"
       enabled: true
+    - name: reduced_yellow_image
+      title: "Reduced Yellow Image"
+      enabled: true
+    - name: bright_contrast_image
+      title: "Output before cropping"
+      enabled: false
 

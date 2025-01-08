@@ -9,7 +9,9 @@ from .whitebalance import WhiteBalanceStep
 from .bilateral_filter import BilateralFilterStep
 from .brightness_contrast import BrightnessContrastStep
 from .mask_color import MaskColorStep
-from .find_minor_contours import FindMinorContoursStep
+from .find_subject import FindSubjectStep
+from .crop_to_mask import CropToMaskStep
+from .save import SaveImageStep
 
 # Automatically register all steps in this module
 STEP_REGISTRY = {}

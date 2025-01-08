@@ -42,6 +42,8 @@ class LoadImageStep(PipelineStep):
             self.pages = [
                 (page, 0) if isinstance(page, int) else page for page in pages
             ]
+        elif pages is None:
+            self.pages = [(page, 0) for page in self.index["page"].unique()]
 
         # Create page map
         self.page_map = {}
@@ -51,6 +53,9 @@ class LoadImageStep(PipelineStep):
             label = page.get_label()
             if label is not None:
                 self.page_map[label] = physical_number
+                
+        if self.book == "birdsEuropeVGoul":
+            self.page_map["448"] = 418
 
         self.pipeline.set_property("page_map", self.page_map)
 
@@ -75,6 +80,7 @@ class LoadImageStep(PipelineStep):
                     english_label=row["en_name"],
                     scientific_label=row["sci_name"],
                     physical_page=physical_page,
+                    book=self.book,
                 )
             )
         return images

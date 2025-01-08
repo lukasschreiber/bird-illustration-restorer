@@ -12,6 +12,7 @@ class PipelineImageContainer:
     english_label: str
     scientific_label: str
     physical_page: int
+    book: str
     
 @dataclass
 class PreviewImage:
@@ -158,7 +159,6 @@ class PipelineStep:
         if len(mask.image.shape) > 2 or mask.image.dtype != np.uint8:
             raise ValueError("The mask must be a single-channel binary image with dtype=np.uint8.")
 
-        print("here")
         masked_image = image.image.copy()
         roi = cv2.bitwise_and(masked_image, masked_image, mask=mask.image)
         roi_container = replace(image, image=roi)
