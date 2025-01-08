@@ -3,17 +3,19 @@ from pipeline.base import PipelineStep, PipelineImageContainer
 import numpy as np
 
 class WhiteBalanceStep(PipelineStep):
-    def __init__(self, name, pipeline=None, k: int = 3, max_size: int = 256, strength: int = 1.0):
+    def __init__(self, name, pipeline=None, k: int = 3, max_size: int = 256, strength: float = 1.0, correction_min: float = 0.8, correction_max: float = 1.2):
         super().__init__(name, pipeline)
         self.k = k
         self.max_size = max_size
         self.strength = strength
+        self.correction_min = correction_min
+        self.correction_max = correction_max
 
-    def process_single(self, input_item: PipelineImageContainer):
-        input_item.image = self._correct_color_balance(input_item.image, self._detect_background_color_kmeans(input_item.image, self.k, self.max_size), self.strength)
+    def process_single(self, input_item: PipelineImageContainer, mask):
+        input_item.image = self._correct_color_balance(input_item.image, self._detect_background_color_kmeans(input_item.image, self.k, self.max_size), self.strength, self.correction_min, self.correction_max)
         return input_item
     
-    def _detect_background_color_kmeans(self, image: np.ndarray, k: int = 3, max_size: int = 256) -> np.ndarray:
+    def _detect_background_color_kmeans(self, image: np.ndarray, k: int, max_size: int) -> np.ndarray:
         """
         Detect the dominant background color of an image using k-means clustering.
         
@@ -38,7 +40,7 @@ class WhiteBalanceStep(PipelineStep):
         dominant_color = centers[np.argmax(np.bincount(labels.flatten()))]
         return np.uint8(dominant_color)
     
-    def _correct_color_balance(self, image: np.ndarray, avg_bg_color: np.ndarray, strength: int = 1.0) -> np.ndarray:
+    def _correct_color_balance(self, image: np.ndarray, avg_bg_color: np.ndarray, strength: float, correction_min: float, correction_max: float) -> np.ndarray:
         """
         Correct the color balance of an image based on the average background color.
         The strength parameter controls the intensity of the correction.
@@ -53,7 +55,7 @@ class WhiteBalanceStep(PipelineStep):
         """
         image = image.astype(np.float32)
         correction_factors = np.array([avg_bg_color[0] / 128.0, avg_bg_color[1] / 128.0, avg_bg_color[2] / 128.0])
-        correction_factors = np.clip(correction_factors, 0.8, 1.2)  # Prevent over-correction
+        correction_factors = np.clip(correction_factors, correction_min, correction_max)  # Prevent over-correction
         corrected_image = image * correction_factors * strength
         corrected_image = np.clip(corrected_image, 0, 255).astype(np.uint8)
         

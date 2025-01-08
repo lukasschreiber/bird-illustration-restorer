@@ -24,20 +24,20 @@ class PreviewImage:
 
 class Pipeline:
     def __init__(self):
-        self.steps: list[PipelineStep] = []
+        self.steps: list[tuple[PipelineStep, str, str]] = []
         self.cache: dict[str, PipelineImageContainer] = {}
         self.preview_enabled: bool = False
         self.preview_images: dict[str, PreviewImage] = {}
         self.preview_image_titles: dict[str, str] = {}
         self.global_object_storage: GlobalObjectStorage = GlobalObjectStorage()
 
-    def add(self, step, input_name: str):
+    def add(self, step, input_name: str, mask_name: str = None) -> None:
         """
         Add a step to the pipeline.
         :param step: The step to add
         :param input_names: The names of the inputs for the step
         """
-        self.steps.append((step, input_name))
+        self.steps.append((step, input_name, mask_name))
 
     def run(self) -> list[PipelineImageContainer] | PipelineImageContainer:
         """
@@ -45,9 +45,10 @@ class Pipeline:
         :param initial_data: The initial data to start the pipeline
         :return: The result of the pipeline
         """
-        for step, input_name in self.steps:
+        for step, input_name, mask_name in self.steps:
             inputs = self.cache[input_name] if input_name else None
-            result = step.run(inputs)
+            masks = self.cache[mask_name] if mask_name else None
+            result = step.run(inputs, masks)
             self.cache[step.name] = result
                                     
             if self.preview_enabled and step.name in self.preview_images:
@@ -71,7 +72,7 @@ class Pipeline:
                 for img in preview_image:
                     img.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(img)).image
             else:
-                preview_image.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(preview_image)).image
+                preview_image.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(preview_image), None).image
             # print([img.title for img in preview_image] if isinstance(preview_image, list) else preview_image.title)
         return self.preview_images
     
@@ -140,17 +141,23 @@ class PipelineStep:
         self.name = name
         self.pipeline = pipeline
 
-    def process_single(self, image: PipelineImageContainer) -> PipelineImageContainer:
+    def process_single(self, image: PipelineImageContainer, mask: np.ndarray | None = None) -> PipelineImageContainer:
         """
         Subclasses should implement this to process a single input.
         """
         raise NotImplementedError("Subclasses must implement 'process_single'.")
 
-    def run(self, inputs: list[PipelineImageContainer] | PipelineImageContainer) -> list[PipelineImageContainer] | PipelineImageContainer:
+    def run(self, inputs: list[PipelineImageContainer] | PipelineImageContainer, masks: list[np.ndarray] | np.ndarray | None = None) -> list[PipelineImageContainer] | PipelineImageContainer:
         """
         Process a list of inputs or a single input.
         """
         if isinstance(inputs, list):
-            return [self.process_single(replace(item)) for item in inputs]
+            if masks and not isinstance(masks, list):
+                raise ValueError("Masks should be a list if inputs are a list.")
+            return [
+                self.process_single(replace(item), mask=(masks[i] if masks else None)) 
+                for i, item in enumerate(inputs)
+            ]
         else:
-            return self.process_single(replace(inputs))
+            mask = masks if isinstance(masks, np.ndarray) else None
+            return self.process_single(replace(inputs), mask)

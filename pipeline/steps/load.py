@@ -54,7 +54,7 @@ class LoadImageStep(PipelineStep):
 
         self.pipeline.set_property("page_map", self.page_map)
 
-    def run(self, inputs):
+    def run(self, inputs, masks):
         """
         Load and return a list of images for the specified pages and instances.
         """

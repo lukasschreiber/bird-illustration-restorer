@@ -9,7 +9,7 @@ class ReduceYellowStep(PipelineStep):
         self.grayscale_image = grayscale_image
         super().__init__(name, pipeline)
 
-    def process_single(self, input_item: PipelineImageContainer):
+    def process_single(self, input_item: PipelineImageContainer, mask):
         # find the image where instance and page are the same in self.pipeline.cache[grayscale_image]
         original_image = None
         for item in self.pipeline.cache[self.grayscale_image]:

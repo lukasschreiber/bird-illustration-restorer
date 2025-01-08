@@ -7,7 +7,7 @@ class ResizeStep(PipelineStep):
         self.size = (width, height)
         self.max = max
 
-    def process_single(self, input_item: PipelineImageContainer):
+    def process_single(self, input_item: PipelineImageContainer, mask):
         if self.max is not None:
             h, w = input_item.image.shape[:2]
             aspect_ratio = w / h

@@ -4,7 +4,8 @@ pipeline:
     output: initial_image
     parameters:
       book: "birdsEuropeIGoul"
-      pages: [1, 2, 34]
+      # pages: [1, 2, 34]
+      pages: [43]
 
   - step: FixOrientationStep
     input: initial_image
@@ -21,6 +22,8 @@ pipeline:
       strength: 1.0
       k: 3
       max_size: 256
+      correction_min: 0.8
+      correction_max: 1.2
 
   - step: ReduceYellowStep
     input: white_balanced_image
