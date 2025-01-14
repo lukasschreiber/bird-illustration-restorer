@@ -2,9 +2,10 @@ pipeline:
   input:
     directory: ./data/in/raw/
     book: "birdsEuropeIGoul"
-    pages: [2]
+    # pages: [7, 23]
+    pages: [13]
     # pages: [1, 2, 34]
-    # pages: [43]
+    # pages: [10]
   output:
     directory: ./data/out/processed/
   steps:
@@ -20,22 +21,54 @@ pipeline:
       input: oriented_image
       output: white_balanced_image
       parameters:
-        strength: 1.2
+        strength: 1.0
         k: 3
         max_size: 256
         correction_min: 0.8
         correction_max: 1.2
+        min_target_white_percent: 0.1
 
-    - step: ReduceYellowStep
+    - step: WhiteBalanceStep
+      input: oriented_image
+      output: intensive_white_balanced_image
+      parameters:
+        strength: 1.1
+        k: 3
+        max_size: 256
+        correction_min: 0.8
+        correction_max: 1.2
+        sync: "white_balanced_image"
+
+    - step: ReduceYellowBySubtractionStep
       input: white_balanced_image
+      output: subtracted_image
+      parameters:
+        image: intensive_white_balanced_image
+        threshold: 0.5
+        shift: 50
+
+    # - step: ReduceYellowStep
+    #   input: white_balanced_image
+    #   output: reduced_yellow_image
+    #   parameters:
+    #     grayscale_image: white_balanced_image
+    #     tolerance: 30
+    #     color: [245, 235, 225]
+
+    - step: CropToMaskStep
+      input: white_balanced_image
+      mask: subtracted_image
       output: reduced_yellow_image
       parameters:
-        grayscale_image: white_balanced_image
-        tolerance: 30
-        color: [245, 235, 225]
+        background_color: [255, 255, 255]
+        padding: 50
+
+    - step: RemoveFeaturesLocalStep
+      input: reduced_yellow_image
+      output: removed_features_image
 
     - step: BilateralFilterStep
-      input: reduced_yellow_image
+      input: removed_features_image
       output: bilateral_filtered_image
       parameters:
         diameter: 9
@@ -87,17 +120,23 @@ preview:
       enabled: false
     - name: white_balanced_image
       title: "White Balanced Image"
-      enabled: true
+      enabled: false
+    - name: intensive_white_balanced_image
+      title: "Intensive White Balanced Image"
+      enabled: false
     - name: non_white_mask
       title: "Non White Mask"
       enabled: false
     - name: subject_mask
       title: "Subject Mask"
-      enabled: true
+      enabled: false
     - name: reduced_yellow_image
       title: "Reduced Yellow Image"
-      enabled: true
+      enabled: false
     - name: bright_contrast_image
       title: "Output before cropping"
+      enabled: false
+    - name: subtracted_image
+      title: "Subtracted Image"
       enabled: false
 

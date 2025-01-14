@@ -10,6 +10,8 @@ from .brightness_contrast import BrightnessContrastStep
 from .mask_color import MaskColorStep
 from .find_subject import FindSubjectStep
 from .crop_to_mask import CropToMaskStep
+from .subtract import ReduceYellowBySubtractionStep
+from .remove_features_local import RemoveFeaturesLocalStep
 
 # Automatically register all steps in this module
 STEP_REGISTRY = {}

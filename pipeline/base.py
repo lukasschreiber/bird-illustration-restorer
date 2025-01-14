@@ -104,7 +104,7 @@ class Pipeline:
         self.input_directory = config['pipeline']['input']['directory']
         self.book = config['pipeline']['input']['book']
         self.output_directory = config['pipeline']['output']['directory']
-        self.pages = config['pipeline']['input']['pages']
+        self.pages = config['pipeline']['input']['pages'] if 'pages' in config['pipeline']['input'] else None
             
         if 'preview' in config:
             self.preview_enabled = config['preview']['enabled'] if 'enabled' in config['preview'] else False

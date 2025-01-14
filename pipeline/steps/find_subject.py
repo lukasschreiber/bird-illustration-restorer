@@ -12,11 +12,6 @@ class FindSubjectStep(PipelineStep):
         equalized = cv2.equalizeHist(input_item.image)
         blurred = cv2.GaussianBlur(equalized, (9, 9), 0)
         
-        blurred[:50] = 255
-        blurred[-150:] = 255
-        blurred[:, :50] = 255
-        blurred[:, -50:] = 255
-        
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         edges = cv2.Canny(thresh, threshold1=30, threshold2=100)
