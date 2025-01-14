@@ -1,37 +1,25 @@
-from dataclasses import dataclass
 import yaml
 import numpy as np
 from dataclasses import replace
 import cv2
-
-@dataclass        
-class PipelineImageContainer:
-    image: np.ndarray 
-    page: int
-    instance: int
-    english_label: str
-    scientific_label: str
-    physical_page: int
-    book: str
-    
-@dataclass
-class PreviewImage:
-    image: np.ndarray | None
-    page: int | None
-    instance: int | None
-    english_label: str | None
-    scientific_label: str | None
-    physical_page: int | None
-    title: str
+from .load import get_pipeline_input
+from .save import save_pipeline_output
+from typing import Callable
+from .utils import PipelineImageContainer, PreviewImage, GlobalObjectStorage
 
 class Pipeline:
     def __init__(self):
         self.steps: list[tuple[PipelineStep, str, str]] = []
         self.cache: dict[str, PipelineImageContainer] = {}
         self.preview_enabled: bool = False
-        self.preview_images: dict[str, PreviewImage] = {}
+        self.preview_images: dict[str, bool] = {}
         self.preview_image_titles: dict[str, str] = {}
         self.global_object_storage: GlobalObjectStorage = GlobalObjectStorage()
+        self.input_directory: str = ""
+        self.book: str = ""
+        self.preview_size: int = 800
+        self.pages: list[tuple[int, int]] | list[int] | tuple[int, int] | int | None = None
+        self.output_directory: str = ""
 
     def add(self, step, input_name: str, mask_name: str = None) -> None:
         """
@@ -40,43 +28,45 @@ class Pipeline:
         :param input_names: The names of the inputs for the step
         """
         self.steps.append((step, input_name, mask_name))
+        
+    def run_all(self, preview_callback: Callable[[PreviewImage], None]) -> list[PipelineImageContainer]:
+        [index, pdf, page_map, images] = get_pipeline_input(self.input_directory, self.book, self.pages)
+        results = []
+        
+        self.set_property("index", index)
+        self.set_property("pdf", pdf)
+        self.set_property("page_map", page_map)
+        
+        from .steps import ResizeStep
 
-    def run(self) -> list[PipelineImageContainer] | PipelineImageContainer:
-        """
-        Run the pipeline with the initial data.
-        :param initial_data: The initial data to start the pipeline
-        :return: The result of the pipeline
-        """
-        for step, input_name, mask_name in self.steps:
-            inputs = self.cache[input_name] if input_name else None
-            masks = self.cache[mask_name] if mask_name else None
-            result = step.run(inputs, masks)
-            self.cache[step.name] = result
-                                    
-            if self.preview_enabled and step.name in self.preview_images:
-                preview_result = [result] if not isinstance(result, list) else result
-                preview_images = []
-                for preview_result_item in preview_result:
-                    preview_image = PreviewImage(image=preview_result_item.image, page=preview_result_item.page, instance=preview_result_item.instance, english_label=preview_result_item.english_label, scientific_label=preview_result_item.scientific_label, physical_page=preview_result_item.physical_page, title=self.preview_image_titles[step.name])
-                    preview_images.append(preview_image)
-                    
-                self.preview_images[step.name] = preview_images if len(preview_images) > 1 else preview_images[0]                
-
-        return result
+        for image in images:
+            for index, [step, input_name, mask_name] in enumerate(self.steps):
+                if index == 0:
+                    input = image
+                else:
+                    input = self.cache[self.get_cache_key(image, input_name)] if input_name else None
+                mask = self.cache[self.get_cache_key(image, mask_name)] if mask_name else None
+                result = step.run(input, mask)
+                self.cache[self.get_cache_key(image, step.name)] = result
+                                        
+                if self.preview_enabled and step.name in self.preview_images:
+                    preview = PreviewImage(
+                        image=ResizeStep(None, max=self.preview_size, pipeline=self).process_single(replace(result)).image,
+                        page=result.page,
+                        instance=result.instance,
+                        english_label=result.english_label,
+                        scientific_label=result.scientific_label,
+                        physical_page=result.physical_page,
+                        title=self.preview_image_titles[step.name]
+                    )
+                    preview_callback(preview)         
+            results.append(result)
+            save_pipeline_output(self.output_directory, result)
+            
+        return results
     
-    def get_previews(self, size: int = 800) -> dict[str, PreviewImage | list[PreviewImage]]:
-        """
-        Get the preview images.
-        """
-        for preview_image in self.preview_images.values():
-            from .steps import ResizeStep
-            if isinstance(preview_image, list):
-                for img in preview_image:
-                    img.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(img)).image
-            else:
-                preview_image.image = ResizeStep(None, max=size, pipeline=self).process_single(replace(preview_image)).image
-            # print([img.title for img in preview_image] if isinstance(preview_image, list) else preview_image.title)
-        return self.preview_images
+    def get_cache_key(self, image: PipelineImageContainer, name: str) -> str:
+        return f"{image.page}_{image.instance}_{name}"
     
     def get_property(self, name: str, type_hint: type = None) -> any:
         """
@@ -105,38 +95,27 @@ class Pipeline:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
             
-        for step_config in config['pipeline']:
+        for step_config in config['pipeline']['steps']:
             step_name = step_config['output']
             step_class = STEP_REGISTRY[step_config['step']]
             step_args = step_config.get('parameters', {})
             self.add(step_class(step_name, **step_args, pipeline=self), step_config.get('input', None), step_config.get('mask', None))
             
+        self.input_directory = config['pipeline']['input']['directory']
+        self.book = config['pipeline']['input']['book']
+        self.output_directory = config['pipeline']['output']['directory']
+        self.pages = config['pipeline']['input']['pages']
+            
         if 'preview' in config:
             self.preview_enabled = config['preview']['enabled'] if 'enabled' in config['preview'] else False
+            self.preview_size = config['preview']['size'] if 'size' in config['preview'] else 800
             if self.preview_enabled:
                 for preview_config in config['preview']['images']:
                     if 'enabled' in preview_config and not preview_config['enabled']:
                         continue
-                    self.preview_images[preview_config['name']] = None
+                    self.preview_images[preview_config['name']] = True
                     self.preview_image_titles[preview_config['name']] = preview_config.get('title', preview_config['name'])
-
-    
-class GlobalObjectStorage:
-    def __init__(self):
-        self.storage: dict[str, any] = {}
-
-    def get(self, name: str) -> any:
-        return self.storage.get(name, None)
-
-    def set(self, name: str, value: any) -> None:
-        self.storage[name] = value
-
-    def remove(self, name: str) -> None:
-        if name in self.storage:
-            del self.storage[name]
-
-    def exists(self, name: str) -> bool:
-        return name in self.storage       
+ 
             
 class PipelineStep:
     def __init__(self, name: str, pipeline: Pipeline = None):
@@ -168,17 +147,9 @@ class PipelineStep:
 
         return replace(image, image=processed_image)
 
-    def run(self, inputs: list[PipelineImageContainer] | PipelineImageContainer, masks: list[PipelineImageContainer] | PipelineImageContainer | None = None) -> list[PipelineImageContainer] | PipelineImageContainer:
+    def run(self, input: PipelineImageContainer, mask: PipelineImageContainer | None = None) -> PipelineImageContainer:
         """
         Process a list of inputs or a single input.
         """
-        if isinstance(inputs, list):
-            if masks and not isinstance(masks, list):
-                raise ValueError("Masks should be a list if inputs are a list.")
-            return [
-                self.process_masked_single(replace(item), mask=(masks[i] if masks else None)) 
-                for i, item in enumerate(inputs)
-            ]
-        else:
-            mask = masks if isinstance(masks, PipelineImageContainer) else None
-            return self.process_masked_single(replace(inputs), mask)
+        mask = mask if isinstance(mask, PipelineImageContainer) else None
+        return self.process_masked_single(replace(input), mask)

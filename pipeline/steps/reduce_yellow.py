@@ -11,13 +11,9 @@ class ReduceYellowStep(PipelineStep):
 
     def process_single(self, input_item: PipelineImageContainer):
         # find the image where instance and page are the same in self.pipeline.cache[grayscale_image]
-        original_image = None
-        for item in self.pipeline.cache[self.grayscale_image]:
-            if item.page == input_item.page and item.instance == input_item.instance:
-                original_image = item.image
-                break
+        original_image = self.pipeline.cache[self.pipeline.get_cache_key(input_item, self.grayscale_image)]
 
-        corrected_image = self._reduce_yellow(input_item.image, original_image, self.tolerance, self.color)
+        corrected_image = self._reduce_yellow(input_item.image, original_image.image, self.tolerance, self.color)
         
         input_item.image = corrected_image
         return input_item

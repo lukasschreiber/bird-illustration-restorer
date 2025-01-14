@@ -1,88 +1,83 @@
 pipeline:
-  - step: LoadImageStep
-    input: null
-    output: initial_image
-    parameters:
-      book: "birdsEuropeIGoul"
-      pages: [2]
-      # pages: [1, 2, 34]
-      # pages: [43]
+  input:
+    directory: ./data/in/raw/
+    book: "birdsEuropeIGoul"
+    pages: [2]
+    # pages: [1, 2, 34]
+    # pages: [43]
+  output:
+    directory: ./data/out/processed/
+  steps:
+    - step: FixOrientationStep
+      input: initial_image
+      output: oriented_image
 
-  - step: FixOrientationStep
-    input: initial_image
-    output: oriented_image
+    - step: GrayscaleStep
+      input: oriented_image
+      output: grayscale_image
 
-  - step: GrayscaleStep
-    input: oriented_image
-    output: grayscale_image
+    - step: WhiteBalanceStep
+      input: oriented_image
+      output: white_balanced_image
+      parameters:
+        strength: 1.0
+        k: 3
+        max_size: 256
+        correction_min: 0.8
+        correction_max: 1.2
 
-  - step: WhiteBalanceStep
-    input: oriented_image
-    output: white_balanced_image
-    parameters:
-      strength: 1.0
-      k: 3
-      max_size: 256
-      correction_min: 0.8
-      correction_max: 1.2
+    - step: ReduceYellowStep
+      input: white_balanced_image
+      output: reduced_yellow_image
+      parameters:
+        grayscale_image: white_balanced_image
+        tolerance: 30
+        color: [245, 235, 225]
 
-  - step: ReduceYellowStep
-    input: white_balanced_image
-    output: reduced_yellow_image
-    parameters:
-      grayscale_image: white_balanced_image
-      tolerance: 30
-      color: [245, 235, 225]
+    - step: BilateralFilterStep
+      input: reduced_yellow_image
+      output: bilateral_filtered_image
+      parameters:
+        diameter: 9
+        sigma_color: 75
+        sigma_space: 75
 
-  - step: BilateralFilterStep
-    input: reduced_yellow_image
-    output: bilateral_filtered_image
-    parameters:
-      diameter: 9
-      sigma_color: 75
-      sigma_space: 75
+    - step: MaskColorStep
+      input: bilateral_filtered_image
+      output: non_white_mask
+      parameters:
+        color: [255, 255, 255]
 
-  - step: MaskColorStep
-    input: bilateral_filtered_image
-    output: non_white_mask
-    parameters:
-      color: [255, 255, 255]
+    - step: BrightnessContrastStep
+      input: bilateral_filtered_image
+      mask: non_white_mask
+      output: bright_contrast_image
+      parameters:
+        brightness: -40
+        contrast: 30
 
-  - step: BrightnessContrastStep
-    input: bilateral_filtered_image
-    mask: non_white_mask
-    output: bright_contrast_image
-    parameters:
-      brightness: -40
-      contrast: 30
+    - step: GrayscaleStep
+      input: bright_contrast_image
+      output: bright_contrast_grayscale_image
 
-  - step: GrayscaleStep
-    input: bright_contrast_image
-    output: bright_contrast_grayscale_image
+    - step: FindSubjectStep
+      input: bright_contrast_grayscale_image
+      output: subject_mask
+      parameters:
+        threshold: 0.5
+        shift: 50
 
-  - step: FindSubjectStep
-    input: bright_contrast_grayscale_image
-    output: subject_mask
-    parameters:
-      threshold: 0.5
-      shift: 50
-
-  - step: CropToMaskStep
-    input: bright_contrast_image
-    mask: subject_mask
-    output: cropped_image
-    parameters:
-      background_color: [255, 255, 255]
-      padding: 50
-
-  - step: SaveImageStep
-    input: cropped_image
-    output: null
-    parameters:
-      output_folder: ./data/out/processed/
+    - step: CropToMaskStep
+      input: bright_contrast_image
+      mask: subject_mask
+      output: cropped_image
+      parameters:
+        background_color: [255, 255, 255]
+        padding: 50
 
 preview:
   enabled: true
+  size: 800
   images:
     - name: cropped_image
       title: "Output"

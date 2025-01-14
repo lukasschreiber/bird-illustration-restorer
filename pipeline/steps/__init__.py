@@ -1,6 +1,5 @@
 import pkgutil
 import inspect
-from .load import LoadImageStep
 from .resize import ResizeStep
 from .gray import GrayscaleStep
 from .fix_orientation import FixOrientationStep
@@ -11,7 +10,6 @@ from .brightness_contrast import BrightnessContrastStep
 from .mask_color import MaskColorStep
 from .find_subject import FindSubjectStep
 from .crop_to_mask import CropToMaskStep
-from .save import SaveImageStep
 
 # Automatically register all steps in this module
 STEP_REGISTRY = {}
