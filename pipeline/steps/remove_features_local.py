@@ -2,23 +2,42 @@ import cv2
 import numpy as np
 from typing import Dict, Tuple
 from pipeline.base import PipelineStep, PipelineImageContainer
+import os
+# from scipy.ndimage import label
+from collections import deque
 
 class RemoveFeaturesLocalStep(PipelineStep):
-    def __init__(self, name, pipeline=None):
+    def __init__(self, name, skip_known: bool, only_known: bool, directory: str, pipeline=None):
         super().__init__(name, pipeline)
         self.window_size = 800
         self.title = "[interactive] Remove Features Locally"
         self.points: list[Tuple[int, int]] = []
         self.rendered_points: list[Tuple[int, int]] = []
-        self.patch_masks: Dict[Tuple[int, int], np.ndarray] = {}  # Corrected type hint
-
+        self.patch_masks: Dict[Tuple[int, int], np.ndarray] = {}
+        self.skip_known = skip_known
+        self.only_known = only_known
+        self.directory = directory
+        self.highlight_mode = 0
 
     def process_single(self, input_item: PipelineImageContainer):
         # Resize the image while maintaining aspect ratio
         self.original_image = input_item.image
+        self.full_size_display_image = self.original_image.copy()
+        self.file_path = os.path.join(self.directory, f"{input_item.book}/{input_item.page}-v-{input_item.instance}.txt")
+        self.mask_file_path = os.path.join(self.directory, f"{input_item.book}/{input_item.page}-v-{input_item.instance}-mask.png")
         self.image = self.resize_image(self.original_image)
         self.title = f"[interactive] Remove Features Locally - {input_item.english_label}"
         self.display_image = self.image.copy()
+        
+        is_known = self.load_points()
+        
+        if self.skip_known and is_known:
+            input_item.image = self.locally_remove_patches(self.original_image, self.points)
+            return input_item
+    
+        if self.only_known and not is_known:
+            return input_item
+            
 
         # Initialize window and set mouse callback
         cv2.namedWindow(self.title, cv2.WINDOW_AUTOSIZE)
@@ -29,7 +48,8 @@ class RemoveFeaturesLocalStep(PipelineStep):
         cv2.waitKey(0)
         cv2.destroyWindow(self.title)
 
-        input_item.image = self.original_image
+        self.save_points()
+        input_item.image = self.locally_remove_patches(self.original_image, self.points)
         return input_item
 
     def resize_image(self, image: np.ndarray) -> np.ndarray:
@@ -48,7 +68,7 @@ class RemoveFeaturesLocalStep(PipelineStep):
     def mouse_callback(self, event, x, y, flags, param):
         # show a green dot at the current location
         self.display_image = self.image.copy()
-        cv2.circle(self.display_image, (x, y), 5, (0, 0, 0), -1)
+        cv2.circle(self.display_image, (x, y), 5, (0, 255, 0), -1)
         
         if event == cv2.EVENT_LBUTTONDOWN:
             self.points.append(self.point_preview_to_original((x, y)))
@@ -58,33 +78,84 @@ class RemoveFeaturesLocalStep(PipelineStep):
             min_distance = 30
             closest_point = None
             for point in self.points:
-                distance = np.linalg.norm(np.array(point) - np.array([x, y]))
+                distance = np.linalg.norm(np.array(self.point_original_to_preview(point)) - np.array([x, y]))
                 if distance < min_distance:
                     min_distance = distance
                     closest_point = point
             
             if closest_point:
                 self.points.remove(closest_point)
-                self.patch_masks.pop(closest_point, None)
-            
+                if closest_point in self.patch_masks:
+                    del self.patch_masks[closest_point]
+                    
+        if event == cv2.EVENT_MBUTTONDOWN:
+            self.highlight_mode = self.highlight_mode + 1
+            if self.highlight_mode > 3:
+                self.highlight_mode = 0
+                                
         self.update_display()
 
     def update_display(self):
         if self.points != self.rendered_points:
             # make changes to original image
-            self.original_image = self.locally_remove_patches(self.original_image, self.points)
-            self.image = self.resize_image(self.original_image)
+            self.full_size_display_image = self.locally_remove_patches(self.original_image.copy(), self.points)
+            self.image = self.resize_image(self.full_size_display_image)
             self.display_image = self.image.copy()
         
-        for point in self.points:
-            cv2.circle(self.display_image, self.point_original_to_preview(point), 5, (0, 0, 255), -1)
+        if self.highlight_mode in [2, 3]:
+            self.display_image[self.display_image == 255] = 0
+        
+        if self.highlight_mode % 2 == 0:
+            for point in self.points:
+                cv2.circle(self.display_image, self.point_original_to_preview(point), 5, (0, 0, 255), -1)
         
         self.rendered_points = self.points.copy()
+        # make all white pixels black
         cv2.imshow(self.title, self.display_image)
         key = cv2.waitKey(1)
 
         if key == 27:  # ESC key to exit
             cv2.destroyWindow(self.title)
+            
+    def load_points(self) -> bool:
+        if os.path.exists(self.file_path):
+            if os.path.exists(self.mask_file_path):
+                mask = cv2.imread(self.mask_file_path, cv2.IMREAD_GRAYSCALE)
+            with open(self.file_path, "r") as file:
+                for line in file:
+                    line_parts = line.strip().split()
+                    if len(line_parts) == 2:
+                        x, y = map(int, line_parts)
+                        mask_value = None
+                    elif len(line_parts) == 3:
+                        x, y, mask_value = map(int, line_parts)
+                        
+                    point = (x, y)
+                    if mask_value != None:
+                        # find the mask for this point
+                        # turn all pixels with the same value as the mask value to white
+                        patch_mask = mask.copy()
+                        patch_mask[patch_mask != mask_value] = 0
+                        patch_mask[patch_mask == mask_value] = 255
+                        self.patch_masks[point] = patch_mask
+                                                
+                    self.points.append(point)
+            return True
+        return False
+                    
+    def save_points(self):
+        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        mask = np.zeros_like(self.original_image, dtype=np.uint8)
+        mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        
+        with open(self.file_path, "w") as file:
+            for index, point in enumerate(self.points):
+                if index > 254:
+                    # We can't store more than 254 masks
+                    break
+                file.write(f"{point[0]} {point[1]} {255-index}\n")
+                mask[self.patch_masks[point] == 255] = 255-index
+        cv2.imwrite(self.mask_file_path, mask)
             
     def point_preview_to_original(self, point: Tuple[int, int]) -> Tuple[int, int]:
         """
@@ -144,24 +215,26 @@ class RemoveFeaturesLocalStep(PipelineStep):
                 average_color = np.mean(patch, axis=(0, 1))
                         
                 patch_mask = np.zeros(image.shape[:2], dtype=np.uint8)
-
+                      
+                visited = np.zeros(image.shape[:2], dtype=bool)
+              
                 def flood_fill(x, y):
-                    # Create a queue for BFS (breadth-first search)
-                    queue = [(x, y)]
-                    patch_mask[y, x] = 255  # Mark the starting point as part of the patch
-
+                    queue = deque([(x, y)])
+                    patch_mask[y, x] = 255
+                    visited[y, x] = True  # Use a visited array
                     patch_size = 0
+
                     while queue and patch_size < max_patch_size:
                         patch_size += 1
-                        cx, cy = queue.pop(0)
+                        cx, cy = queue.popleft()
 
-                        # Explore the 4-connected neighbors (up, down, left, right)
-                        for nx, ny in [(cx+1, cy), (cx-1, cy), (cx, cy+1), (cx, cy-1)]:
+                        for nx, ny in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)]:
                             if 0 <= nx < image.shape[1] and 0 <= ny < image.shape[0]:
-                                # Check if the pixel is within the color threshold
-                                if patch_mask[ny, nx] == 0 and np.linalg.norm(average_color - image[ny, nx]) <= color_threshold and not np.array_equal(image[ny, nx], [255, 255, 255]):
-                                    patch_mask[ny, nx] = 255
-                                    queue.append((nx, ny))
+                                if not visited[ny, nx] and patch_mask[ny, nx] == 0:
+                                    if np.linalg.norm(average_color - image[ny, nx]) <= color_threshold and not np.array_equal(image[ny, nx], [255, 255, 255]):
+                                        patch_mask[ny, nx] = 255
+                                        visited[ny, nx] = True  # Mark as visited
+                                        queue.append((nx, ny))
                                     
                 flood_fill(x, y)
                 kernel = np.ones((4, 4), np.uint8)

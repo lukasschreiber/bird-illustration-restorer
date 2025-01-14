@@ -11,11 +11,16 @@ class FindSubjectStep(PipelineStep):
     def process_single(self, input_item: PipelineImageContainer):
         equalized = cv2.equalizeHist(input_item.image)
         blurred = cv2.GaussianBlur(equalized, (9, 9), 0)
+       
+        # blurred[:50] = 255
+        # blurred[-100:] = 255
+        # blurred[:, :50] = 255
+        # blurred[:, -50:] = 255
         
         _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         edges = cv2.Canny(thresh, threshold1=30, threshold2=100)
-        closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, np.ones((32, 32), np.uint8))
+        closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, np.ones((16, 16), np.uint8))
                 
         contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 

@@ -3,7 +3,7 @@ from pipeline.base import PipelineStep, PipelineImageContainer
 import numpy as np
 
 class WhiteBalanceStep(PipelineStep):
-    def __init__(self, name, pipeline=None, k: int = 3, max_size: int = 256, strength: float = 1.0, correction_min: float = 0.8, correction_max: float = 1.2, min_target_white_percent: float = 0.1, sync: str | None = None):
+    def __init__(self, name, pipeline=None, k: int = 3, max_size: int = 256, strength: float = 1.0, correction_min: float = 0.8, correction_max: float = 1.2, min_target_white_percent: float | None = None, sync: str | None = None):
         super().__init__(name, pipeline)
         self.k = k
         self.max_size = max_size
@@ -54,11 +54,19 @@ class WhiteBalanceStep(PipelineStep):
         
         Returns:
         np.ndarray: The color-corrected image.
-        """
+        """           
+        corrected_image = image.astype(np.float32)
+ 
+        if self.min_target_white_percent is None:
+            correction_factors = np.array([avg_bg_color[0] / 128.0, avg_bg_color[1] / 128.0, avg_bg_color[2] / 128.0])
+            correction_factors = np.clip(correction_factors, correction_min, correction_max)  # Prevent over-correction
+            corrected_image = corrected_image * correction_factors * strength
+            corrected_image = np.clip(corrected_image, 0, 255).astype(np.uint8)
+            return corrected_image
+        
         if self.sync:
             strength = self.pipeline.get_property(f"white_balance_strength_{self.sync}_{name}")
         
-        corrected_image = image.astype(np.float32)
         white_percent = 0.0
         while white_percent < self.min_target_white_percent:
             correction_factors = np.array([avg_bg_color[0] / 128.0, avg_bg_color[1] / 128.0, avg_bg_color[2] / 128.0])
