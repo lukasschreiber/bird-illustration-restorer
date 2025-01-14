@@ -20,7 +20,7 @@ pipeline:
       input: oriented_image
       output: white_balanced_image
       parameters:
-        strength: 1.0
+        strength: 1.2
         k: 3
         max_size: 256
         correction_min: 0.8
