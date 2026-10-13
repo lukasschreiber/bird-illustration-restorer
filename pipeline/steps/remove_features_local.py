@@ -20,6 +20,11 @@ class RemoveFeaturesLocalStep(PipelineStep):
         self.highlight_mode = 0
 
     def process_single(self, input_item: PipelineImageContainer):
+        # Removal coordinates and masks belong only to the current plate.
+        self.points = []
+        self.rendered_points = []
+        self.patch_masks = {}
+        self.highlight_mode = 0
         # Resize the image while maintaining aspect ratio
         self.original_image = input_item.image
         self.full_size_display_image = self.original_image.copy()

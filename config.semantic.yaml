@@ -1,0 +1,75 @@
+# Experimental candidate: validate retention of scenery before production use.
+pipeline:
+  input:
+    directory: ./data/in/raw/
+    book: birdsEuropeIVGoul
+    pages: [278]
+  output:
+    directory: ./data/out/semantic-review/
+  steps:
+    - step: FixOrientationStep
+      input: initial_image
+      output: oriented_image
+    - step: SemanticIllustrationMaskStep
+      input: oriented_image
+      output: subject_mask
+      parameters:
+        model_path: ./data/models/birefnet-general-lite.onnx
+        input_size: 1024
+        threshold: 0.5
+        foreground_classes: [1]
+        output_is_logits: true
+    - step: WhiteBalanceStep
+      input: oriented_image
+      output: white_balanced_image_to_use
+      parameters:
+        strength: 1.0
+        k: 3
+        max_size: 256
+        correction_min: 0.8
+        correction_max: 1.2
+    - step: CropToMaskStep
+      input: white_balanced_image_to_use
+      mask: subject_mask
+      output: reduced_yellow_image
+      parameters:
+        background_color: [255, 255, 255]
+        padding: 50
+    - step: BilateralFilterStep
+      input: reduced_yellow_image
+      output: bilateral_filtered_image
+      parameters:
+        diameter: 9
+        sigma_color: 75
+        sigma_space: 75
+    - step: MaskColorStep
+      input: bilateral_filtered_image
+      output: non_white_mask
+      parameters:
+        color: [255, 255, 255]
+    - step: BrightnessContrastStep
+      input: bilateral_filtered_image
+      mask: non_white_mask
+      output: cropped_image
+      parameters:
+        brightness: -40
+        contrast: 30
+preview:
+  enabled: true
+  size: 800
+  images:
+    - name: cropped_image
+      title: Output
+      enabled: true
+    - name: oriented_image
+      title: Oriented Image
+      enabled: false
+    - name: non_white_mask
+      title: Non White Mask
+      enabled: false
+    - name: subject_mask
+      title: Subject Mask
+      enabled: true
+    - name: reduced_yellow_image
+      title: Reduced Yellow Image
+      enabled: false

@@ -30,6 +30,7 @@ class Pipeline:
         self.steps.append((step, input_name, mask_name))
         
     def run_all(self, preview_callback: Callable[[PreviewImage], None]) -> list[PipelineImageContainer]:
+        print(f"Loading book: {self.book}", flush=True)
         [index, pdf, page_map, images] = get_pipeline_input(self.input_directory, self.book, self.pages)
         results = []
         
@@ -39,7 +40,11 @@ class Pipeline:
         
         from .steps import ResizeStep
 
-        for image in images:
+        for position, image in enumerate(images, start=1):
+            print(f"[{position}/{len(images)}] Processing book={image.book} "
+                  f"image={image.page} instance={image.instance} "
+                  f"scan_page={image.physical_page}: {image.english_label} "
+                  f"[{image.scientific_label}]", flush=True)
             for index, [step, input_name, mask_name] in enumerate(self.steps):
                 if index == 0:
                     input = image
@@ -62,7 +67,8 @@ class Pipeline:
                     preview_callback(preview)         
             results.append(result)
             save_pipeline_output(self.output_directory, result)
-            
+
+        print(f"Finished book: {self.book} ({len(results)} images)", flush=True)
         return results
     
     def get_cache_key(self, image: PipelineImageContainer, name: str) -> str:

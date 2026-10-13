@@ -1,0 +1,2 @@
+# Install after the base requirements to enable the CUDA ONNX provider.
+onnxruntime-gpu[cuda,cudnn]==1.31.0
