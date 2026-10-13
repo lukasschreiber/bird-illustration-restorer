@@ -54,8 +54,17 @@ class FindSubjectStep(PipelineStep):
             height, width = working.shape
             horizontal = cw > width * 0.5 and ch < height * 0.06
             vertical = ch > height * 0.5 and cw < width * 0.06
+            # Broken scan edges can be much shorter than half the page. Reject
+            # slender detached fragments only in the outermost margin too.
+            horizontal_fragment = (cw > width * .15 and cw > ch * 8 and
+                                   ch < height * .04 and
+                                   (y < height * .04 or y + ch > height * .96))
+            vertical_fragment = (ch > height * .15 and ch > cw * 8 and
+                                 cw < width * .04 and
+                                 (x < width * .04 or x + cw > width * .96))
             return ((horizontal and (y < height * 0.08 or y + ch > height * 0.92)) or
-                    (vertical and (x < width * 0.08 or x + cw > width * 0.92)))
+                    (vertical and (x < width * 0.08 or x + cw > width * 0.92)) or
+                    horizontal_fragment or vertical_fragment)
 
         contours = [c for c in contours if not is_scan_border(c)]
         mask = np.zeros_like(working)

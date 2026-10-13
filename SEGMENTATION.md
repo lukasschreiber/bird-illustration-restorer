@@ -36,6 +36,8 @@ misrepresent sideways captions. Without a matching caption, the scan orientation
 is retained.
 
 The configured pipeline first checks the oriented scan for text with local OCR.
+Subject detection excludes long scan borders and narrow broken border fragments
+in the outermost page margins, preserving similar shapes inside the page.
 It detects illustration outlines after that narrow text cleanup, before color
 correction, smoothing, or brightness adjustment. The final mask is applied to
 the corrected color image. The old brightness-subtraction mask and manual

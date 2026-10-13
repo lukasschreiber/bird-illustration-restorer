@@ -45,6 +45,21 @@ class SubjectMaskTests(unittest.TestCase):
         self.assertEqual(filled[7, 7], 255)
         self.assertEqual(filled[25, 25], 0)
 
+    def test_partial_scan_edge_is_removed_but_interior_branch_is_retained(self):
+        gray = np.full((300, 400), 225, np.uint8)
+        cv2.ellipse(gray, (200, 150), (70, 80), 0, 0, 360, 170, 3)
+        cv2.rectangle(gray, (392, 0), (399, 100), 150, -1)
+        cv2.rectangle(gray, (50, 110), (57, 210), 150, -1)
+        mask = self.mask(gray)
+        self.assertEqual(mask[50, 396], 0)
+        self.assertEqual(mask[150, 54], 255)
+
+    def test_partial_horizontal_scan_edge_is_removed(self):
+        gray = np.full((300, 400), 225, np.uint8)
+        cv2.ellipse(gray, (200, 150), (70, 80), 0, 0, 360, 170, 3)
+        cv2.rectangle(gray, (0, 292), (140, 299), 150, -1)
+        self.assertEqual(self.mask(gray)[295, 70], 0)
+
     def test_resolution_does_not_change_subject_selection(self):
         gray = np.full((300, 400), 225, np.uint8)
         cv2.ellipse(gray, (200, 150), (100, 80), 0, 0, 360, 170, 3)
